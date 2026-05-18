@@ -25,6 +25,16 @@ isProject: false
 
 # Coup Multiplayer Web Game — Implementation Plan
 
+---
+## Important
+
+- **Dont use the word COUP anywhere in the project**
+- **Use take over instead of COUP**
+- **Dont use any words that sound like a game**
+- **Dont have any phrases that would make it sound like a game**
+
+---
+
 ## Repository layout
 
 ```
