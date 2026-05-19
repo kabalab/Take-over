@@ -4,22 +4,22 @@ overview: "Greenfield monorepo: Canvas front-end (static on Vercel), Node/Expres
 todos:
   - id: scaffold-server
     content: "Scaffold server/: Express, SQLite schema, bcrypt auth, cookie sessions, CORS, health route"
-    status: pending
+    status: completed
   - id: room-lobby
     content: Implement RoomManager (codes, 2–N join, delete when empty) and Socket.IO lobby handlers
-    status: pending
+    status: completed
   - id: game-engine
     content: "Build Game.js state machine: scaled deck, all actions, challenge/block windows, 60s/30s timers, win detection"
-    status: pending
+    status: completed
   - id: friends-presence
     content: Add friends REST API and socket presence (online + inRoomCode) with join-from-friends UX data
-    status: pending
+    status: completed
   - id: canvas-client
     content: "Build client/: Canvas renderer, screens, input hit-testing, socket wiring, auth HTML forms"
-    status: pending
+    status: completed
   - id: deploy-docs
     content: Add vercel.json, Render config, env examples, README with deploy + manual test checklist
-    status: pending
+    status: completed
 isProject: false
 ---
 

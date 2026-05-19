@@ -1,0 +1,239 @@
+import { auth, friends as friendsApi } from './api.js';
+import { connectSocket, emit, getSocket } from './socket.js';
+import { appState, setUser, setSpace, setSession } from './state.js';
+import { Renderer } from './canvas/renderer.js';
+import { bindInput } from './canvas/input.js';
+
+const canvas = document.getElementById('main');
+const authPanel = document.getElementById('auth-panel');
+const renderer = new Renderer(canvas);
+
+appState.shuffleSelection = [];
+appState.loseStandingId = null;
+
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+function getViewState() {
+  return { ...appState };
+}
+
+function loop() {
+  renderer.draw(getViewState());
+  requestAnimationFrame(loop);
+}
+
+async function initAuth() {
+  document.querySelectorAll('#auth-tabs button').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#auth-tabs button').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      const tab = btn.dataset.tab;
+      document.getElementById('signin-form').classList.toggle('hidden', tab !== 'signin');
+      document.getElementById('register-form').classList.toggle('hidden', tab !== 'register');
+    });
+  });
+
+  document.getElementById('signin-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    try {
+      const user = await auth.login(fd.get('username'), fd.get('password'));
+      await onSignedIn(user);
+    } catch (err) {
+      document.getElementById('signin-error').textContent = err.message;
+    }
+  });
+
+  document.getElementById('register-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    try {
+      const user = await auth.register(fd.get('username'), fd.get('password'));
+      await onSignedIn(user);
+    } catch (err) {
+      document.getElementById('register-error').textContent = err.message;
+    }
+  });
+
+  try {
+    const user = await auth.me();
+    await onSignedIn(user);
+  } catch {
+    authPanel.classList.remove('hidden');
+  }
+}
+
+async function onSignedIn(user) {
+  setUser(user);
+  authPanel.classList.add('hidden');
+  appState.screen = 'home';
+  const sock = connectSocket();
+  setupSocket(sock);
+  await loadFriends();
+  const saved = localStorage.getItem('to_space');
+  if (saved) {
+    try {
+      const res = await emit('space:join', { code: saved });
+      setSpace(res.state);
+    } catch {
+      localStorage.removeItem('to_space');
+    }
+  }
+  loop();
+}
+
+function setupSocket(sock) {
+  sock.on('space:state', (space) => {
+    setSpace(space);
+    if (space.status !== 'active') appState.screen = 'waiting';
+  });
+
+  sock.on('session:state', (session) => {
+    setSession(session);
+    if (appState.space?.code) localStorage.setItem('to_space', appState.space.code);
+  });
+
+  sock.on('friends:presence', (list) => {
+    appState.friends = list;
+  });
+}
+
+async function loadFriends() {
+  try {
+    appState.friends = await friendsApi.list();
+  } catch {
+    appState.friends = [];
+  }
+}
+
+async function handleHit(hit) {
+  const id = hit.id;
+  try {
+    if (id === 'signout') {
+      await auth.logout();
+      location.reload();
+      return;
+    }
+    if (id === 'create-public') {
+      const res = await emit('space:create', { visibility: 'public' });
+      setSpace(res.state);
+      appState.screen = 'waiting';
+      return;
+    }
+    if (id === 'create-private') {
+      const res = await emit('space:create', { visibility: 'private' });
+      setSpace(res.state);
+      appState.screen = 'waiting';
+      return;
+    }
+    if (id === 'join-code') {
+      const code = prompt('Enter space code');
+      if (!code) return;
+      const res = await emit('space:join', { code: code.trim().toUpperCase() });
+      setSpace(res.state);
+      return;
+    }
+    if (id === 'list-public') {
+      const res = await emit('space:listPublic');
+      appState.publicSpaces = res.spaces || [];
+      return;
+    }
+    if (id === 'add-friend') {
+      const username = prompt('Friend username');
+      if (!username) return;
+      await friendsApi.add(username.trim());
+      await loadFriends();
+      showToast('Friend added');
+      return;
+    }
+    if (id.startsWith('join-friend-')) {
+      const username = id.replace('join-friend-', '');
+      const f = appState.friends.find((x) => x.username === username);
+      if (f?.spaceCode) {
+        const res = await emit('space:join', { code: f.spaceCode });
+        setSpace(res.state);
+      }
+      return;
+    }
+    if (id.startsWith('join-public-')) {
+      const code = id.replace('join-public-', '');
+      const res = await emit('space:join', { code });
+      setSpace(res.state);
+      return;
+    }
+    if (id === 'leave-space') {
+      await emit('space:leave');
+      localStorage.removeItem('to_space');
+      setSpace(null);
+      setSession(null);
+      appState.screen = 'home';
+      appState.selectedTarget = null;
+      return;
+    }
+    if (id === 'copy-code' && appState.space) {
+      await navigator.clipboard.writeText(appState.space.code);
+      showToast('Code copied');
+      return;
+    }
+    if (id === 'start-session') {
+      await emit('session:start');
+      return;
+    }
+    if (id.startsWith('target-')) {
+      appState.selectedTarget = hit.data.targetId;
+      return;
+    }
+    if (id.startsWith('action-')) {
+      const type = id.replace('action-', '');
+      const needsTarget = ['takeover', 'strike', 'seize'].includes(type);
+      await emit('session:action', {
+        type,
+        targetId: needsTarget ? appState.selectedTarget : undefined,
+      });
+      appState.selectedTarget = null;
+      return;
+    }
+    if (id === 'challenge') {
+      await emit('session:challenge');
+      return;
+    }
+    if (id === 'pass') {
+      await emit('session:pass');
+      return;
+    }
+    if (id.startsWith('block-')) {
+      const role = id.replace('block-', '');
+      await emit('session:block', { role });
+      return;
+    }
+    if (id.startsWith('lose-')) {
+      await emit('session:loseToken', { cardIndex: hit.data.cardIndex });
+      return;
+    }
+    if (id.startsWith('keep-')) {
+      const tid = hit.data.tokenId;
+      if (!appState.shuffleSelection) appState.shuffleSelection = [];
+      const idx = appState.shuffleSelection.indexOf(tid);
+      if (idx >= 0) appState.shuffleSelection.splice(idx, 1);
+      else if (appState.shuffleSelection.length < 2) appState.shuffleSelection.push(tid);
+      return;
+    }
+    if (id === 'confirm-shuffle') {
+      await emit('session:shufflePick', { keptIds: appState.shuffleSelection });
+      appState.shuffleSelection = [];
+      return;
+    }
+  } catch (err) {
+    showToast(err.message);
+  }
+}
+
+bindInput(canvas, renderer, handleHit);
+window.addEventListener('resize', () => renderer.resize());
+renderer.resize();
+initAuth();
