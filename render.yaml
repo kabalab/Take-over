@@ -1,6 +1,7 @@
 services:
   - type: web
     name: take-over-api
+    plan: free
     runtime: node
     rootDir: server
     buildCommand: npm install

@@ -9,7 +9,8 @@ Repo is ready on GitHub. No CLI tools were available on this machine, so these s
 
 ## 2. Render — [render.com](https://render.com)
 
-- **New → Blueprint** → repo `kabalab/Take-over` (uses `render.yaml`)
+- **New → Blueprint** → repo `kabalab/Take-over` (uses `render.yaml`, `plan: free` = $0)
+- If you already created the service: **Settings → Instance type → Free** (not Starter $7)
 - Environment variables:
   - `TURSO_DATABASE_URL` = from Turso
   - `TURSO_AUTH_TOKEN` = from Turso
