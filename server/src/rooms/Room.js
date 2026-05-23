@@ -3,6 +3,7 @@ import { Session } from '../session/Session.js';
 export const VISIBILITY = {
   public: 'public',
   private: 'private',
+  friends: 'friends',
 };
 
 export class Room {
@@ -54,7 +55,7 @@ export class Room {
 
   toLobbyState() {
     return {
-      code: this.code,
+      code: this.visibility === VISIBILITY.friends ? null : this.code,
       hostId: this.hostId,
       visibility: this.visibility,
       status: this.status,

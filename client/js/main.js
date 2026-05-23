@@ -1,5 +1,5 @@
 import { auth, friends as friendsApi } from './api.js';
-import { connectSocket, emit, getSocket } from './socket.js';
+import { connectSocket, emit, waitForSocket } from './socket.js';
 import { appState, setUser, setSpace, setSession } from './state.js';
 import { Renderer } from './canvas/renderer.js';
 import { bindInput } from './canvas/input.js';
@@ -60,6 +60,15 @@ async function initAuth() {
     }
   });
 
+  document.getElementById('guest-btn').addEventListener('click', async () => {
+    try {
+      const user = await auth.guest();
+      await onSignedIn(user);
+    } catch (err) {
+      document.getElementById('guest-error').textContent = err.message;
+    }
+  });
+
   try {
     const user = await auth.me();
     await onSignedIn(user);
@@ -74,7 +83,12 @@ async function onSignedIn(user) {
   appState.screen = 'home';
   const sock = connectSocket();
   setupSocket(sock);
-  await loadFriends();
+  try {
+    await waitForSocket();
+  } catch (err) {
+    showToast(err.message);
+  }
+  if (!user.isGuest) await loadFriends();
   const saved = localStorage.getItem('to_space');
   if (saved) {
     try {
@@ -90,7 +104,6 @@ async function onSignedIn(user) {
 function setupSocket(sock) {
   sock.on('space:state', (space) => {
     setSpace(space);
-    if (space.status !== 'active') appState.screen = 'waiting';
   });
 
   sock.on('session:state', (session) => {
@@ -101,9 +114,17 @@ function setupSocket(sock) {
   sock.on('friends:presence', (list) => {
     appState.friends = list;
   });
+
+  sock.on('connect', () => {
+    if (!appState.user?.isGuest) loadFriends();
+  });
 }
 
 async function loadFriends() {
+  if (appState.user?.isGuest) {
+    appState.friends = [];
+    return;
+  }
   try {
     appState.friends = await friendsApi.list();
   } catch {
@@ -131,6 +152,12 @@ async function handleHit(hit) {
       appState.screen = 'waiting';
       return;
     }
+    if (id === 'create-friends') {
+      const res = await emit('space:create', { visibility: 'friends' });
+      setSpace(res.state);
+      appState.screen = 'waiting';
+      return;
+    }
     if (id === 'join-code') {
       const code = prompt('Enter space code');
       if (!code) return;
@@ -139,8 +166,17 @@ async function handleHit(hit) {
       return;
     }
     if (id === 'list-public') {
+      showToast('Loading…');
       const res = await emit('space:listPublic');
       appState.publicSpaces = res.spaces || [];
+      appState.browsePublicOpen = true;
+      return;
+    }
+    if (id === 'list-friends') {
+      showToast('Loading…');
+      const res = await emit('space:listFriends');
+      appState.friendSpaces = res.spaces || [];
+      appState.browseFriendsOpen = true;
       return;
     }
     if (id === 'add-friend') {
@@ -160,6 +196,12 @@ async function handleHit(hit) {
       }
       return;
     }
+    if (id.startsWith('join-friendspace-')) {
+      const hostId = id.replace('join-friendspace-', '');
+      const res = await emit('space:joinFriends', { hostId });
+      setSpace(res.state);
+      return;
+    }
     if (id.startsWith('join-public-')) {
       const code = id.replace('join-public-', '');
       const res = await emit('space:join', { code });
@@ -173,9 +215,11 @@ async function handleHit(hit) {
       setSession(null);
       appState.screen = 'home';
       appState.selectedTarget = null;
+      appState.browsePublicOpen = false;
+      appState.browseFriendsOpen = false;
       return;
     }
-    if (id === 'copy-code' && appState.space) {
+    if (id === 'copy-code' && appState.space?.code) {
       await navigator.clipboard.writeText(appState.space.code);
       showToast('Code copied');
       return;

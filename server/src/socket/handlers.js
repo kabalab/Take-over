@@ -1,6 +1,12 @@
-import { areFriends } from '../db/index.js';
+import { areFriends, listFriends } from '../db/index.js';
 import { VISIBILITY } from '../rooms/Room.js';
 import { setUserSpace } from '../presence.js';
+
+function presenceSpaceCode(room) {
+  if (!room) return null;
+  if (room.visibility === VISIBILITY.friends) return null;
+  return room.code;
+}
 
 export function registerSocketHandlers(io, roomManager, { notifyFriends, onConnect }) {
   io.on('connection', (socket) => {
@@ -13,11 +19,17 @@ export function registerSocketHandlers(io, roomManager, { notifyFriends, onConne
 
     socket.on('space:create', ({ visibility } = {}, cb) => {
       try {
-        const vis = visibility === VISIBILITY.private ? VISIBILITY.private : VISIBILITY.public;
+        if (user.isGuest && visibility !== VISIBILITY.public) {
+          return cb?.({ ok: false, error: 'Guests can only create public spaces' });
+        }
+        let vis = VISIBILITY.public;
+        if (visibility === VISIBILITY.private) vis = VISIBILITY.private;
+        else if (visibility === VISIBILITY.friends) vis = VISIBILITY.friends;
+
         const room = roomManager.create(user.id, user.username, socket.id, vis);
-        setUserSpace(user.id, room.code);
+        setUserSpace(user.id, presenceSpaceCode(room));
         socket.join(room.code);
-        notifyFriends(user.id);
+        if (!user.isGuest) notifyFriends(user.id);
         cb?.({ ok: true, state: room.toLobbyState() });
         io.to(room.code).emit('space:state', room.toLobbyState());
       } catch (e) {
@@ -29,6 +41,12 @@ export function registerSocketHandlers(io, roomManager, { notifyFriends, onConne
       try {
         const room = roomManager.get(code);
         if (!room) return cb?.({ ok: false, error: 'Space not found' });
+
+        if (room.visibility === VISIBILITY.friends) {
+          const ok =
+            room.hostId === user.id || (await areFriends(user.id, room.hostId));
+          if (!ok) return cb?.({ ok: false, error: 'Friends space — friends only' });
+        }
 
         let allowed = room.hostId === user.id;
         if (room.visibility === VISIBILITY.private && !allowed) {
@@ -60,9 +78,9 @@ export function registerSocketHandlers(io, roomManager, { notifyFriends, onConne
           room.addMember(user.id, user.username, socket.id, { spectator: asSpectator });
         }
         roomManager.userRoom.set(user.id, room.code);
-        setUserSpace(user.id, room.code);
+        setUserSpace(user.id, presenceSpaceCode(room));
         socket.join(room.code);
-        notifyFriends(user.id);
+        if (!user.isGuest) notifyFriends(user.id);
 
         cb?.({ ok: true, state: room.toLobbyState() });
         io.to(room.code).emit('space:state', room.toLobbyState());
@@ -72,11 +90,40 @@ export function registerSocketHandlers(io, roomManager, { notifyFriends, onConne
       }
     });
 
+    socket.on('space:joinFriends', async ({ hostId } = {}, cb) => {
+      try {
+        if (user.isGuest) return cb?.({ ok: false, error: 'Sign in to join friends spaces' });
+        const room = roomManager.findFriendsRoomByHost(hostId);
+        if (!room) return cb?.({ ok: false, error: 'Friends space not found' });
+        if (!(await areFriends(user.id, hostId)) && hostId !== user.id) {
+          return cb?.({ ok: false, error: 'Friends only' });
+        }
+
+        const existing = room.members.get(user.id);
+        if (existing) {
+          existing.socketId = socket.id;
+          existing.spectator = false;
+        } else {
+          if (roomManager.getByUser(user.id)) roomManager.leave(user.id);
+          room.addMember(user.id, user.username, socket.id);
+        }
+        roomManager.userRoom.set(user.id, room.code);
+        setUserSpace(user.id, null);
+        socket.join(room.code);
+        notifyFriends(user.id);
+
+        cb?.({ ok: true, state: room.toLobbyState() });
+        io.to(room.code).emit('space:state', room.toLobbyState());
+      } catch (e) {
+        cb?.({ ok: false, error: e.message });
+      }
+    });
+
     socket.on('space:leave', (_, cb) => {
       const result = roomManager.leave(user.id);
       socket.leaveAll();
       setUserSpace(user.id, null);
-      notifyFriends(user.id);
+      if (!user.isGuest) notifyFriends(user.id);
       if (result && !result.deleted && result.room) {
         io.to(result.code).emit('space:state', result.room.toLobbyState());
       }
@@ -85,6 +132,17 @@ export function registerSocketHandlers(io, roomManager, { notifyFriends, onConne
 
     socket.on('space:listPublic', (_, cb) => {
       cb?.({ ok: true, spaces: roomManager.listPublicWaiting() });
+    });
+
+    socket.on('space:listFriends', async (_, cb) => {
+      try {
+        if (user.isGuest) return cb?.({ ok: true, spaces: [] });
+        const friends = await listFriends(user.id);
+        const spaces = roomManager.listFriendsWaiting(friends.map((f) => f.id));
+        cb?.({ ok: true, spaces });
+      } catch (e) {
+        cb?.({ ok: false, error: e.message });
+      }
     });
 
     socket.on('session:start', (_, cb) => {
@@ -96,8 +154,8 @@ export function registerSocketHandlers(io, roomManager, { notifyFriends, onConne
         const session = room.startSession();
         session.setOnUpdate(() => broadcastSession(io, room));
         cb?.({ ok: true });
-        io.to(room.code).emit('space:state', room.toLobbyState());
         broadcastSession(io, room);
+        io.to(room.code).emit('space:state', room.toLobbyState());
       } catch (e) {
         cb?.({ ok: false, error: e.message });
       }
@@ -179,9 +237,4 @@ export function broadcastSession(io, room) {
     });
     io.to(m.socketId).emit('session:state', view);
   }
-}
-
-export function emitFriendsPresence(io, userId) {
-  const friends = listFriends(userId);
-  const { getFriendsPresence } = require('../presence.js');
 }

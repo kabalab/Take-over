@@ -56,4 +56,29 @@ export class RoomManager {
       .filter((r) => r.visibility === VISIBILITY.public && r.status === 'waiting')
       .map((r) => r.toLobbyState());
   }
+
+  listFriendsWaiting(friendHostIds) {
+    const hostSet = new Set(friendHostIds);
+    return [...this.rooms.values()]
+      .filter(
+        (r) =>
+          r.visibility === VISIBILITY.friends &&
+          r.status === 'waiting' &&
+          hostSet.has(r.hostId)
+      )
+      .map((r) => ({
+        hostId: r.hostId,
+        hostUsername: r.members.get(r.hostId)?.username ?? 'Host',
+        memberCount: [...r.members.values()].filter((m) => !m.spectator).length,
+      }));
+  }
+
+  findFriendsRoomByHost(hostId) {
+    return [...this.rooms.values()].find(
+      (r) =>
+        r.visibility === VISIBILITY.friends &&
+        r.hostId === hostId &&
+        r.status === 'waiting'
+    );
+  }
 }

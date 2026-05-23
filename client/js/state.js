@@ -5,6 +5,9 @@ export const appState = {
   session: null,
   friends: [],
   publicSpaces: [],
+  friendSpaces: [],
+  browsePublicOpen: false,
+  browseFriendsOpen: false,
   selectedTarget: null,
   toast: null,
 };
@@ -15,11 +18,21 @@ export function setUser(user) {
 
 export function setSpace(space) {
   appState.space = space;
-  if (space?.status === 'active') appState.screen = 'session';
-  else if (space) appState.screen = 'waiting';
+  if (!space) {
+    if (!appState.session) appState.screen = 'home';
+    return;
+  }
+  if (space.status === 'active') {
+    if (appState.session) appState.screen = 'session';
+    else appState.screen = 'waiting';
+  } else {
+    appState.screen = 'waiting';
+  }
 }
 
 export function setSession(session) {
   appState.session = session;
-  if (session) appState.screen = 'session';
+  if (session && appState.space?.status === 'active') {
+    appState.screen = 'session';
+  }
 }

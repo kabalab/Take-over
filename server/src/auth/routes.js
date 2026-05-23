@@ -21,7 +21,9 @@ router.post('/register', async (req, res) => {
     const user = await createUser(uuidv4(), username, hash);
     req.session.userId = user.id;
     req.session.username = user.username;
-    res.json({ id: user.id, username: user.username });
+    delete req.session.guestId;
+    delete req.session.isGuest;
+    res.json({ id: user.id, username: user.username, isGuest: false });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Registration failed' });
@@ -41,11 +43,25 @@ router.post('/login', async (req, res) => {
 
     req.session.userId = user.id;
     req.session.username = user.username;
-    res.json({ id: user.id, username: user.username });
+    delete req.session.guestId;
+    delete req.session.isGuest;
+    res.json({ id: user.id, username: user.username, isGuest: false });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Sign in failed' });
   }
+});
+
+router.post('/guest', (req, res) => {
+  const id = uuidv4();
+  const tag = id.replace(/-/g, '').slice(0, 6);
+  delete req.session.userId;
+  delete req.session.isGuest;
+  delete req.session.guestId;
+  req.session.guestId = id;
+  req.session.username = `Guest_${tag}`;
+  req.session.isGuest = true;
+  res.json({ id, username: req.session.username, isGuest: true });
 });
 
 router.post('/logout', (req, res) => {
@@ -54,7 +70,14 @@ router.post('/logout', (req, res) => {
 });
 
 router.get('/me', requireAuth, (req, res) => {
-  res.json({ id: req.session.userId, username: req.session.username });
+  if (req.session.isGuest) {
+    return res.json({
+      id: req.session.guestId,
+      username: req.session.username,
+      isGuest: true,
+    });
+  }
+  res.json({ id: req.session.userId, username: req.session.username, isGuest: false });
 });
 
 export default router;

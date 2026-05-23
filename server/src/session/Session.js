@@ -87,6 +87,7 @@ export class Session {
       this.phase = PHASE.over;
       this.phaseEndsAt = null;
       this._pushLog(alive[0] ? `${alive[0].username} is the last standing` : 'Session ended');
+      this.emitUpdate();
       return;
     }
     let idx = this.turnIndex;
@@ -171,11 +172,41 @@ export class Session {
     return null;
   }
 
+  _eligiblePassers() {
+    const alive = this.aliveMembers();
+    if (this.phase === PHASE.challengeAction) {
+      const actorId = this.pending?.actorId;
+      return alive.filter((m) => m.id !== actorId).map((m) => m.id);
+    }
+    if (this.phase === PHASE.block) {
+      const actorId = this.pending?.actorId;
+      return alive.filter((m) => m.id !== actorId).map((m) => m.id);
+    }
+    if (this.phase === PHASE.challengeBlock) {
+      const blockerId = this.block?.userId;
+      return alive.filter((m) => m.id !== blockerId).map((m) => m.id);
+    }
+    return [];
+  }
+
+  _allEligiblePassed() {
+    const eligible = this._eligiblePassers();
+    if (eligible.length === 0) return true;
+    return eligible.every((id) => this.passed.has(id));
+  }
+
   pass(userId) {
     if (![PHASE.challengeAction, PHASE.challengeBlock, PHASE.block].includes(this.phase)) {
       return 'Cannot pass now';
     }
+    const eligible = this._eligiblePassers();
+    if (!eligible.includes(userId)) return 'Cannot pass now';
     this.passed.add(userId);
+    if (this._allEligiblePassed()) {
+      if (this.phase === PHASE.challengeAction) this.endChallengeAction();
+      else if (this.phase === PHASE.block) this.endBlockWindow();
+      else if (this.phase === PHASE.challengeBlock) this.endChallengeBlock();
+    }
     return null;
   }
 
@@ -459,6 +490,7 @@ export class Session {
       this.clearTimer();
       this.phaseEndsAt = null;
       this._pushLog(`${alive[0].username} is the last standing`);
+      this.emitUpdate();
     }
   }
 

@@ -27,6 +27,7 @@ export const auth = {
     api('/api/auth/register', { method: 'POST', body: JSON.stringify({ username, password }) }),
   login: (username, password) =>
     api('/api/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
+  guest: () => api('/api/auth/guest', { method: 'POST' }),
   logout: () => api('/api/auth/logout', { method: 'POST' }),
   me: () => api('/api/auth/me'),
 };

@@ -1,3 +1,11 @@
+import {
+  pendingActionText,
+  canPassPhase,
+  canChallenge,
+  canCounter,
+  counterRoles,
+} from '../gameUi.js';
+
 const ROLE_LABELS = {
   director: 'Director',
   agent: 'Agent',
@@ -22,6 +30,12 @@ const ROLE_COLORS = {
   shield: '#e36209',
   liaison: '#22863a',
   chief: '#0366d6',
+};
+
+const VIS_LABELS = {
+  public: 'Public',
+  private: 'Private',
+  friends: 'Friends only',
 };
 
 export class Renderer {
@@ -111,39 +125,78 @@ export class Renderer {
 
   drawHome(state) {
     const { width: w, height: h } = this;
+    const isGuest = state.user.isGuest;
     this.text('Take Over', w / 2, 40, { align: 'center', font: 'bold 28px Segoe UI', color: '#58a6ff' });
-    this.text(`Signed in as ${state.user.username}`, w / 2, 80, { align: 'center', color: '#8b949e' });
+    const sub = isGuest ? `${state.user.username} (guest)` : `Signed in as ${state.user.username}`;
+    this.text(sub, w / 2, 80, { align: 'center', color: '#8b949e' });
 
     let y = 120;
     this.button('create-public', 'New public space', 40, y, 200, 40, { primary: true });
-    this.button('create-private', 'New private space', 260, y, 200, 40);
+    if (!isGuest) {
+      this.button('create-private', 'New private space', 260, y, 200, 40);
+    }
     y += 56;
     this.button('join-code', 'Join with code', 40, y, 200, 40);
     this.button('list-public', 'Browse public spaces', 260, y, 200, 40);
     y += 56;
-    this.text('Friends', 40, y, { font: 'bold 18px Segoe UI' });
-    y += 28;
-    this.button('add-friend', '+ Add friend', 40, y, 140, 32);
-    y += 40;
 
-    for (const f of state.friends.slice(0, 8)) {
-      const online = f.online ? '●' : '○';
-      this.text(`${online} ${f.username}${f.spaceCode ? ` — ${f.spaceCode}` : ''}`, 40, y, {
-        color: f.online ? '#3fb950' : '#8b949e',
-      });
-      if (f.spaceCode) {
-        this.button(`join-friend-${f.username}`, 'Join', w - 120, y - 4, 80, 28, { primary: true });
-      }
-      y += 32;
+    if (!isGuest) {
+      this.button('create-friends', 'New friends space', 40, y, 200, 40);
+      this.button('list-friends', "Browse friends' spaces", 260, y, 220, 40);
+      y += 56;
     }
 
-    if (state.publicSpaces?.length) {
-      y += 16;
+    if (state.browsePublicOpen) {
       this.text('Public spaces', 40, y, { font: 'bold 18px Segoe UI' });
       y += 28;
-      for (const sp of state.publicSpaces.slice(0, 5)) {
-        this.text(`${sp.code} — ${sp.members.filter((m) => !m.spectator).length} members`, 40, y);
-        this.button(`join-public-${sp.code}`, 'Join', w - 120, y - 4, 80, 28);
+      if (state.publicSpaces?.length) {
+        for (const sp of state.publicSpaces.slice(0, 5)) {
+          this.text(`${sp.code} — ${sp.members.filter((m) => !m.spectator).length} members`, 40, y);
+          this.button(`join-public-${sp.code}`, 'Join', w - 120, y - 4, 80, 28);
+          y += 32;
+        }
+      } else {
+        this.text('No public spaces waiting — create one or try again later.', 40, y, {
+          color: '#8b949e',
+          font: '14px Segoe UI',
+        });
+        y += 28;
+      }
+      y += 16;
+    }
+
+    if (!isGuest && state.browseFriendsOpen) {
+      this.text("Friends' spaces", 40, y, { font: 'bold 18px Segoe UI' });
+      y += 28;
+      if (state.friendSpaces?.length) {
+        for (const sp of state.friendSpaces.slice(0, 5)) {
+          this.text(`${sp.hostUsername} — ${sp.memberCount} members`, 40, y);
+          this.button(`join-friendspace-${sp.hostId}`, 'Join', w - 120, y - 4, 80, 28, {
+            primary: true,
+          });
+          y += 32;
+        }
+      } else {
+        this.text('No friends spaces waiting.', 40, y, { color: '#8b949e', font: '14px Segoe UI' });
+        y += 28;
+      }
+      y += 16;
+    }
+
+    if (!isGuest) {
+      this.text('Friends', 40, y, { font: 'bold 18px Segoe UI' });
+      y += 28;
+      this.button('add-friend', '+ Add friend', 40, y, 140, 32);
+      y += 40;
+
+      for (const f of state.friends.slice(0, 8)) {
+        const online = f.online ? '●' : '○';
+        this.text(`${online} ${f.username}${f.spaceCode ? ` — ${f.spaceCode}` : ''}`, 40, y, {
+          color: f.online ? '#3fb950' : '#8b949e',
+        });
+        if (f.spaceCode) {
+          this.button(`join-friend-${f.username}`, 'Join', w - 120, y - 4, 80, 28, { primary: true });
+        }
         y += 32;
       }
     }
@@ -155,8 +208,28 @@ export class Renderer {
     const space = state.space;
     if (!space) return;
     const { width: w } = this;
-    this.text(`Space ${space.code}`, w / 2, 40, { align: 'center', font: 'bold 24px Segoe UI' });
-    this.text(space.visibility === 'private' ? 'Private' : 'Public', w / 2, 72, { align: 'center', color: '#8b949e' });
+
+    if (space.status === 'active' && !state.session) {
+      this.text('Starting game…', w / 2, this.height / 2, {
+        align: 'center',
+        font: 'bold 20px Segoe UI',
+        color: '#8b949e',
+      });
+      this.button('leave-space', 'Leave', 40, this.height - 60, 120, 40);
+      return;
+    }
+
+    const title =
+      space.visibility === 'friends'
+        ? "Friends' space"
+        : space.code
+          ? `Space ${space.code}`
+          : 'Space';
+    this.text(title, w / 2, 40, { align: 'center', font: 'bold 24px Segoe UI' });
+    this.text(VIS_LABELS[space.visibility] || space.visibility, w / 2, 72, {
+      align: 'center',
+      color: '#8b949e',
+    });
 
     let y = 120;
     this.text('Members', 40, y, { font: 'bold 18px Segoe UI' });
@@ -171,14 +244,27 @@ export class Renderer {
       this.button('start-session', 'Begin', 40, y + 16, 160, 44, { primary: true });
     }
     this.button('leave-space', 'Leave', 40, this.height - 60, 120, 40);
-    this.button('copy-code', 'Copy code', 180, this.height - 60, 120, 40);
+    if (space.code) {
+      this.button('copy-code', 'Copy code', 180, this.height - 60, 120, 40);
+    }
   }
 
   drawSession(state) {
     const s = state.session;
-    if (!s) return;
     const { width: w, height: h } = this;
+
+    if (!s) {
+      this.text('Starting game…', w / 2, h / 2, {
+        align: 'center',
+        font: 'bold 20px Segoe UI',
+        color: '#8b949e',
+      });
+      this.button('leave-space', 'Leave', 20, h - 50, 90, 36);
+      return;
+    }
+
     const me = s.you;
+    const userId = me?.id ?? state.user?.id;
     const secs = s.phaseEndsAt ? Math.max(0, Math.ceil((new Date(s.phaseEndsAt) - Date.now()) / 1000)) : null;
 
     this.text(`Phase: ${s.phase.replace(/_/g, ' ')}${secs != null ? ` — ${secs}s` : ''}`, 20, 16, {
@@ -186,10 +272,22 @@ export class Renderer {
       color: '#8b949e',
     });
 
+    if (s.pending && ['block', 'challenge_action', 'challenge_block'].includes(s.phase)) {
+      this.text(pendingActionText(s), 20, 36, { font: '13px Segoe UI', color: '#d29922' });
+    }
+
+    if (s.winnerId) {
+      const winner = s.members.find((m) => m.id === s.winnerId);
+      this.text(`${winner?.username ?? 'Player'} wins!`, w / 2, 56, {
+        align: 'center',
+        font: 'bold 22px Segoe UI',
+        color: '#3fb950',
+      });
+    }
+
     const cx = w / 2;
     const cy = h / 2 - 40;
     const radius = Math.min(w, h) * 0.32;
-    const members = s.members.filter((m) => !m.eliminated || m.id === me?.id);
     const n = s.members.length;
 
     s.members.forEach((m, i) => {
@@ -210,6 +308,8 @@ export class Renderer {
       if (state.selectedTarget === m.id) {
         this.ctx.strokeStyle = '#58a6ff';
         this.ctx.lineWidth = 2;
+        this.ctx.beginPath();
+        this.ctx.arc(x, y, 36, 0, Math.PI * 2);
         this.ctx.stroke();
       }
       if (!m.eliminated && m.id !== me?.id && s.phase === 'turn' && me?.id === s.activeId) {
@@ -239,18 +339,27 @@ export class Renderer {
     if (s.phase === 'turn' && me?.id === s.activeId && !me.eliminated) {
       this.drawActionBar(state);
     } else if (['challenge_action', 'challenge_block'].includes(s.phase)) {
-      this.button('challenge', 'Dispute', w - 200, h - 60, 90, 40, { primary: true });
-      this.button('pass', 'Pass', w - 100, h - 60, 80, 40);
+      const canCh = canChallenge(s, userId);
+      const canP = canPassPhase(s, userId);
+      if (canCh) {
+        this.button('challenge', 'Dispute', w - 200, h - 60, 90, 40, { primary: true });
+      }
+      if (canP) {
+        this.button('pass', 'Pass', w - 100, h - 60, 80, 40);
+      }
+      if (!canCh && !canP) {
+        this.text('Waiting for others…', w / 2, h - 50, { align: 'center', color: '#8b949e' });
+      }
     } else if (s.phase === 'block') {
-      this.drawBlockBar(state);
+      this.drawBlockBar(state, userId);
     } else if (s.phase === 'lose_standing' && s.loseStandingUserId === me?.id) {
       me.tokens.forEach((t, i) => {
-        this.drawToken(t, 20 + i * 90, h - 140, true, `lose-${i}`);
+        this.drawToken(t, 20 + i * 90, h - 140, true, `lose-${i}`, { cardIndex: i });
       });
     } else if (s.phase === 'shuffle_pick' && s.shufflePick) {
       let x = 20;
       for (const t of s.shufflePick.options) {
-        this.drawToken(t, x, h - 140, true, `keep-${t.id}`);
+        this.drawToken(t, x, h - 140, true, `keep-${t.id}`, { tokenId: t.id });
         x += 90;
       }
       this.button('confirm-shuffle', 'Confirm selection', w / 2 - 80, h - 50, 160, 36, {
@@ -262,7 +371,7 @@ export class Renderer {
     this.button('leave-space', 'Leave', 20, h - 50, 90, 36);
   }
 
-  drawToken(token, x, y, faceUp, hitId) {
+  drawToken(token, x, y, faceUp, hitId, data = {}) {
     const ctx = this.ctx;
     ctx.fillStyle = faceUp ? ROLE_COLORS[token.role] || '#30363d' : '#161b22';
     ctx.strokeStyle = '#30363d';
@@ -278,7 +387,11 @@ export class Renderer {
         color: '#fff',
       });
     }
-    if (hitId) this.addHit(hitId, x, y, 70, 100, { tokenId: token.id, cardIndex: parseInt(hitId.split('-')[1], 10) });
+    if (hitId) {
+      const cardIndex =
+        data.cardIndex ?? (hitId.startsWith('lose-') ? parseInt(hitId.split('-')[1], 10) : undefined);
+      this.addHit(hitId, x, y, 70, 100, { tokenId: token.id, cardIndex });
+    }
   }
 
   drawActionBar(state) {
@@ -299,22 +412,28 @@ export class Renderer {
     }
   }
 
-  drawBlockBar(state) {
+  drawBlockBar(state, userId) {
     const s = state.session;
     const p = s.pending;
+    const { width: w, height: h } = this;
     if (!p) return;
-    const roles =
-      p.type === 'support'
-        ? ['director']
-        : p.type === 'strike'
-          ? ['shield']
-          : ['chief', 'liaison'];
+
+    const canCnt = canCounter(s, userId);
+    const canP = canPassPhase(s, userId);
     let x = 20;
-    const y = this.height - 120;
-    for (const r of roles) {
-      this.button(`block-${r}`, `Counter: ${ROLE_LABELS[r]}`, x, y, 140, 40, { primary: true });
-      x += 150;
+    const y = h - 120;
+
+    if (canCnt) {
+      for (const r of counterRoles(p)) {
+        this.button(`block-${r}`, `Counter: ${ROLE_LABELS[r]}`, x, y, 140, 40, { primary: true });
+        x += 150;
+      }
     }
-    this.button('pass', 'Pass', x, y, 80, 40);
+    if (canP) {
+      this.button('pass', 'Pass', x, y, 80, 40);
+    }
+    if (!canCnt && !canP) {
+      this.text('Waiting for others…', w / 2, y + 10, { align: 'center', color: '#8b949e' });
+    }
   }
 }

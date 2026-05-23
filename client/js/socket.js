@@ -17,6 +17,23 @@ export function disconnectSocket() {
   }
 }
 
+export function waitForSocket(timeoutMs = 10000) {
+  const s = connectSocket();
+  if (s.connected) return Promise.resolve(s);
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      s.off('connect', onConnect);
+      reject(new Error('Could not connect to server'));
+    }, timeoutMs);
+    function onConnect() {
+      clearTimeout(timer);
+      s.off('connect', onConnect);
+      resolve(s);
+    }
+    s.on('connect', onConnect);
+  });
+}
+
 export function emit(event, payload) {
   return new Promise((resolve, reject) => {
     if (!socket?.connected) return reject(new Error('Not connected'));
