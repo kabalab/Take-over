@@ -1,5 +1,5 @@
 {
-  "buildCommand": null,
+  "buildCommand": "node scripts/generate-client-config.mjs",
   "outputDirectory": "client",
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }

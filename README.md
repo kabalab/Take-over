@@ -48,9 +48,9 @@ Optional: ping `/health` during play hours to reduce cold starts on Render’s f
 
 ### Vercel (front-end)
 
-1. Import the repo; set **Root Directory** to `client`.
-2. Point `client/config.js` (or env-based config) at your Render API URL for `__API_URL__` and `__SOCKET_URL__`.
-3. Deploy. Cookies use `SameSite=None; Secure` in production.
+1. Import the repo; leave **Root Directory** empty (repo root — `vercel.json` sets `outputDirectory` to `client`).
+2. Add environment variable **`TAKEOVER_API_URL`** = your Render URL (e.g. `https://take-over-api.onrender.com`). Optional: **`TAKEOVER_SOCKET_URL`** if different (defaults to the API URL).
+3. Deploy. The build generates `client/config.js` automatically. Cookies use `SameSite=None; Secure` in production.
 
 After Vercel deploy, set `CLIENT_ORIGIN` on Render to the final Vercel URL and redeploy if you changed it.
 
