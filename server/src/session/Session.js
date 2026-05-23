@@ -80,6 +80,11 @@ export class Session {
     return this.members.find((m) => m.id === id);
   }
 
+  _requireParticipant(userId) {
+    if (!this.getMember(userId)) return 'Not in session';
+    return null;
+  }
+
   advanceToActive() {
     const alive = this.aliveMembers();
     if (alive.length <= 1) {
@@ -140,6 +145,8 @@ export class Session {
   }
 
   declareAction(userId, type, targetId = null) {
+    const participantErr = this._requireParticipant(userId);
+    if (participantErr) return participantErr;
     if (this.phase !== PHASE.turn) return 'Wrong phase';
     const actor = this.active();
     if (actor.id !== userId) return 'Not your turn';
@@ -196,6 +203,8 @@ export class Session {
   }
 
   pass(userId) {
+    const participantErr = this._requireParticipant(userId);
+    if (participantErr) return participantErr;
     if (![PHASE.challengeAction, PHASE.challengeBlock, PHASE.block].includes(this.phase)) {
       return 'Cannot pass now';
     }
@@ -211,6 +220,8 @@ export class Session {
   }
 
   challenge(userId, which = 'auto') {
+    const participantErr = this._requireParticipant(userId);
+    if (participantErr) return participantErr;
     if (this.phase === PHASE.challengeAction) {
       if (this.challenges.action) return 'Already disputed';
       const actor = this.getMember(this.pending.actorId);
@@ -292,6 +303,8 @@ export class Session {
   }
 
   block(userId, blockRole) {
+    const participantErr = this._requireParticipant(userId);
+    if (participantErr) return participantErr;
     if (this.phase !== PHASE.block) return 'Wrong phase';
     const def = ACTIONS[this.pending.type];
     const target = this.getMember(this.pending.targetId);
@@ -385,6 +398,8 @@ export class Session {
   }
 
   shufflePick(userId, keptIds) {
+    const participantErr = this._requireParticipant(userId);
+    if (participantErr) return participantErr;
     if (this.phase !== PHASE.shufflePick) return 'Wrong phase';
     if (!this.shuffleBuffer || this.shuffleBuffer.actorId !== userId) return 'Not your turn';
     const { drawn, hand } = this.shuffleBuffer;
@@ -453,6 +468,8 @@ export class Session {
   }
 
   loseStanding(userId, cardIndex) {
+    const participantErr = this._requireParticipant(userId);
+    if (participantErr) return participantErr;
     if (this.phase !== PHASE.loseStanding) return 'Wrong phase';
     if (this.loseStandingUserId !== userId) return 'Not your selection';
     const m = this.getMember(userId);

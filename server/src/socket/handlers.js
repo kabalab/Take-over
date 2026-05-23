@@ -1,5 +1,5 @@
 import { areFriends, listFriends } from '../db/index.js';
-import { VISIBILITY } from '../rooms/Room.js';
+import { VISIBILITY, sanitizePublicName } from '../rooms/Room.js';
 import { setUserSpace } from '../presence.js';
 
 function presenceSpaceCode(room) {
@@ -17,7 +17,7 @@ export function registerSocketHandlers(io, roomManager, { notifyFriends, onConne
     }
     onConnect?.(socket, user);
 
-    socket.on('space:create', ({ visibility } = {}, cb) => {
+    socket.on('space:create', ({ visibility, name } = {}, cb) => {
       try {
         if (user.isGuest && visibility !== VISIBILITY.public) {
           return cb?.({ ok: false, error: 'Guests can only create public spaces' });
@@ -26,7 +26,8 @@ export function registerSocketHandlers(io, roomManager, { notifyFriends, onConne
         if (visibility === VISIBILITY.private) vis = VISIBILITY.private;
         else if (visibility === VISIBILITY.friends) vis = VISIBILITY.friends;
 
-        const room = roomManager.create(user.id, user.username, socket.id, vis);
+        const roomName = vis === VISIBILITY.public ? sanitizePublicName(name) : null;
+        const room = roomManager.create(user.id, user.username, socket.id, vis, roomName);
         setUserSpace(user.id, presenceSpaceCode(room));
         socket.join(room.code);
         if (!user.isGuest) notifyFriends(user.id);
@@ -46,17 +47,6 @@ export function registerSocketHandlers(io, roomManager, { notifyFriends, onConne
           const ok =
             room.hostId === user.id || (await areFriends(user.id, room.hostId));
           if (!ok) return cb?.({ ok: false, error: 'Friends space — friends only' });
-        }
-
-        let allowed = room.hostId === user.id;
-        if (room.visibility === VISIBILITY.private && !allowed) {
-          for (const m of room.members.values()) {
-            if (m.userId !== user.id && (await areFriends(user.id, m.userId))) {
-              allowed = true;
-              break;
-            }
-          }
-          if (!allowed) return cb?.({ ok: false, error: 'Private space — friends only' });
         }
 
         const inProgress = room.status === 'active';

@@ -11,6 +11,8 @@ const renderer = new Renderer(canvas);
 appState.shuffleSelection = [];
 appState.loseStandingId = null;
 
+let spaceListInterval = null;
+
 function showToast(msg) {
   const el = document.getElementById('toast');
   el.textContent = msg;
@@ -89,11 +91,13 @@ async function onSignedIn(user) {
     showToast(err.message);
   }
   if (!user.isGuest) await loadFriends();
+  startSpaceListPolling();
   const saved = localStorage.getItem('to_space');
   if (saved) {
     try {
       const res = await emit('space:join', { code: saved });
       setSpace(res.state);
+      stopSpaceListPolling();
     } catch {
       localStorage.removeItem('to_space');
     }
@@ -117,7 +121,38 @@ function setupSocket(sock) {
 
   sock.on('connect', () => {
     if (!appState.user?.isGuest) loadFriends();
+    if (appState.screen === 'home') refreshSpaceLists();
   });
+}
+
+function startSpaceListPolling() {
+  stopSpaceListPolling();
+  refreshSpaceLists();
+  spaceListInterval = setInterval(() => {
+    if (appState.screen === 'home') refreshSpaceLists();
+  }, 10000);
+}
+
+function stopSpaceListPolling() {
+  if (spaceListInterval) {
+    clearInterval(spaceListInterval);
+    spaceListInterval = null;
+  }
+}
+
+async function refreshSpaceLists() {
+  try {
+    const pub = await emit('space:listPublic');
+    appState.publicSpaces = pub.spaces || [];
+    if (!appState.user?.isGuest) {
+      const fr = await emit('space:listFriends');
+      appState.friendSpaces = fr.spaces || [];
+    } else {
+      appState.friendSpaces = [];
+    }
+  } catch {
+    // lists refresh silently when offline
+  }
 }
 
 async function loadFriends() {
@@ -141,21 +176,27 @@ async function handleHit(hit) {
       return;
     }
     if (id === 'create-public') {
-      const res = await emit('space:create', { visibility: 'public' });
+      const nameInput = prompt('Lobby name (optional)');
+      const payload = { visibility: 'public' };
+      if (nameInput?.trim()) payload.name = nameInput.trim();
+      const res = await emit('space:create', payload);
       setSpace(res.state);
       appState.screen = 'waiting';
+      stopSpaceListPolling();
       return;
     }
     if (id === 'create-private') {
       const res = await emit('space:create', { visibility: 'private' });
       setSpace(res.state);
       appState.screen = 'waiting';
+      stopSpaceListPolling();
       return;
     }
     if (id === 'create-friends') {
       const res = await emit('space:create', { visibility: 'friends' });
       setSpace(res.state);
       appState.screen = 'waiting';
+      stopSpaceListPolling();
       return;
     }
     if (id === 'join-code') {
@@ -163,20 +204,7 @@ async function handleHit(hit) {
       if (!code) return;
       const res = await emit('space:join', { code: code.trim().toUpperCase() });
       setSpace(res.state);
-      return;
-    }
-    if (id === 'list-public') {
-      showToast('Loading…');
-      const res = await emit('space:listPublic');
-      appState.publicSpaces = res.spaces || [];
-      appState.browsePublicOpen = true;
-      return;
-    }
-    if (id === 'list-friends') {
-      showToast('Loading…');
-      const res = await emit('space:listFriends');
-      appState.friendSpaces = res.spaces || [];
-      appState.browseFriendsOpen = true;
+      stopSpaceListPolling();
       return;
     }
     if (id === 'add-friend') {
@@ -193,6 +221,7 @@ async function handleHit(hit) {
       if (f?.spaceCode) {
         const res = await emit('space:join', { code: f.spaceCode });
         setSpace(res.state);
+        stopSpaceListPolling();
       }
       return;
     }
@@ -200,12 +229,14 @@ async function handleHit(hit) {
       const hostId = id.replace('join-friendspace-', '');
       const res = await emit('space:joinFriends', { hostId });
       setSpace(res.state);
+      stopSpaceListPolling();
       return;
     }
     if (id.startsWith('join-public-')) {
       const code = id.replace('join-public-', '');
       const res = await emit('space:join', { code });
       setSpace(res.state);
+      stopSpaceListPolling();
       return;
     }
     if (id === 'leave-space') {
@@ -215,8 +246,7 @@ async function handleHit(hit) {
       setSession(null);
       appState.screen = 'home';
       appState.selectedTarget = null;
-      appState.browsePublicOpen = false;
-      appState.browseFriendsOpen = false;
+      startSpaceListPolling();
       return;
     }
     if (id === 'copy-code' && appState.space?.code) {

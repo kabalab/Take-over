@@ -29,7 +29,7 @@ export function canPassPhase(session, userId) {
 }
 
 export function canChallenge(session, userId) {
-  if (!session?.you || session.you.eliminated) return false;
+  if (!session?.you || session.you.eliminated || session.you.spectator) return false;
   if (session.phase === 'challenge_action') {
     return userId !== session.pending?.actorId;
   }

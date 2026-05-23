@@ -137,35 +137,33 @@ export class Renderer {
     }
     y += 56;
     this.button('join-code', 'Join with code', 40, y, 200, 40);
-    this.button('list-public', 'Browse public spaces', 260, y, 200, 40);
     y += 56;
 
     if (!isGuest) {
       this.button('create-friends', 'New friends space', 40, y, 200, 40);
-      this.button('list-friends', "Browse friends' spaces", 260, y, 220, 40);
       y += 56;
     }
 
-    if (state.browsePublicOpen) {
-      this.text('Public spaces', 40, y, { font: 'bold 18px Segoe UI' });
-      y += 28;
-      if (state.publicSpaces?.length) {
-        for (const sp of state.publicSpaces.slice(0, 5)) {
-          this.text(`${sp.code} — ${sp.members.filter((m) => !m.spectator).length} members`, 40, y);
-          this.button(`join-public-${sp.code}`, 'Join', w - 120, y - 4, 80, 28);
-          y += 32;
-        }
-      } else {
-        this.text('No public spaces waiting — create one or try again later.', 40, y, {
-          color: '#8b949e',
-          font: '14px Segoe UI',
-        });
-        y += 28;
+    this.text('Public spaces', 40, y, { font: 'bold 18px Segoe UI' });
+    y += 28;
+    if (state.publicSpaces?.length) {
+      for (const sp of state.publicSpaces.slice(0, 5)) {
+        const count = sp.members.filter((m) => !m.spectator).length;
+        const label = sp.name ? `"${sp.name}" — ${sp.code} (${count})` : `${sp.code} — ${count} members`;
+        this.text(label, 40, y, { font: '14px Segoe UI' });
+        this.button(`join-public-${sp.code}`, 'Join', w - 120, y - 4, 80, 28);
+        y += 32;
       }
-      y += 16;
+    } else {
+      this.text('No public spaces waiting — create one or try again later.', 40, y, {
+        color: '#8b949e',
+        font: '14px Segoe UI',
+      });
+      y += 28;
     }
+    y += 16;
 
-    if (!isGuest && state.browseFriendsOpen) {
+    if (!isGuest) {
       this.text("Friends' spaces", 40, y, { font: 'bold 18px Segoe UI' });
       y += 28;
       if (state.friendSpaces?.length) {
@@ -222,9 +220,11 @@ export class Renderer {
     const title =
       space.visibility === 'friends'
         ? "Friends' space"
-        : space.code
-          ? `Space ${space.code}`
-          : 'Space';
+        : space.name
+          ? space.name
+          : space.code
+            ? `Space ${space.code}`
+            : 'Space';
     this.text(title, w / 2, 40, { align: 'center', font: 'bold 24px Segoe UI' });
     this.text(VIS_LABELS[space.visibility] || space.visibility, w / 2, 72, {
       align: 'center',
@@ -337,6 +337,14 @@ export class Renderer {
     });
 
     if (s.phase === 'turn' && me?.id === s.activeId && !me.eliminated) {
+      const allowed = new Set(s.allowed || []);
+      const needsTarget = ['takeover', 'strike', 'seize'].some((a) => allowed.has(a));
+      if (needsTarget && !state.selectedTarget) {
+        this.text('Tap a player, then choose an action', 20, h - 244, {
+          color: '#8b949e',
+          font: '13px Segoe UI',
+        });
+      }
       this.drawActionBar(state);
     } else if (['challenge_action', 'challenge_block'].includes(s.phase)) {
       const canCh = canChallenge(s, userId);

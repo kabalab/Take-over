@@ -6,8 +6,6 @@ export const appState = {
   friends: [],
   publicSpaces: [],
   friendSpaces: [],
-  browsePublicOpen: false,
-  browseFriendsOpen: false,
   selectedTarget: null,
   toast: null,
 };

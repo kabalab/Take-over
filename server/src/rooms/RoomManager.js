@@ -1,5 +1,5 @@
 import { customAlphabet } from 'nanoid';
-import { Room, VISIBILITY } from './Room.js';
+import { Room, VISIBILITY, sanitizePublicName } from './Room.js';
 
 const genCode = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 6);
 
@@ -11,14 +11,16 @@ export class RoomManager {
     this.userRoom = new Map();
   }
 
-  create(hostId, hostUsername, socketId, visibility = VISIBILITY.public) {
+  create(hostId, hostUsername, socketId, visibility = VISIBILITY.public, name = null) {
     if (this.userRoom.has(hostId)) this.leave(hostId);
     let code;
     do {
       code = genCode();
     } while (this.rooms.has(code));
 
-    const room = new Room(code, hostId, visibility);
+    const roomName =
+      visibility === VISIBILITY.public ? sanitizePublicName(name) : null;
+    const room = new Room(code, hostId, visibility, roomName);
     room.addMember(hostId, hostUsername, socketId);
     this.rooms.set(code, room);
     this.userRoom.set(hostId, code);

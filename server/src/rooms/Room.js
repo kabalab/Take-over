@@ -6,11 +6,19 @@ export const VISIBILITY = {
   friends: 'friends',
 };
 
+export function sanitizePublicName(raw) {
+  if (!raw || typeof raw !== 'string') return null;
+  const trimmed = raw.replace(/[\x00-\x1f\x7f]/g, '').trim();
+  if (!trimmed) return null;
+  return trimmed.slice(0, 32);
+}
+
 export class Room {
-  constructor(code, hostId, visibility = VISIBILITY.public) {
+  constructor(code, hostId, visibility = VISIBILITY.public, name = null) {
     this.code = code;
     this.hostId = hostId;
     this.visibility = visibility;
+    this.name = name;
     /** @type {Map<string, { userId: string, username: string, socketId: string | null, spectator: boolean }>} */
     this.members = new Map();
     this.session = null;
@@ -56,6 +64,7 @@ export class Room {
   toLobbyState() {
     return {
       code: this.visibility === VISIBILITY.friends ? null : this.code,
+      name: this.name,
       hostId: this.hostId,
       visibility: this.visibility,
       status: this.status,
