@@ -119,9 +119,20 @@ function setupSocket(sock) {
     appState.friends = list;
   });
 
-  sock.on('connect', () => {
+  sock.on('connect', async () => {
     if (!appState.user?.isGuest) loadFriends();
     if (appState.screen === 'home') refreshSpaceLists();
+    if (
+      appState.space?.code &&
+      (appState.screen === 'session' || appState.screen === 'waiting')
+    ) {
+      try {
+        const res = await emit('space:join', { code: appState.space.code });
+        setSpace(res.state);
+      } catch {
+        // reconnect sync is best-effort
+      }
+    }
   });
 }
 
@@ -263,8 +274,16 @@ async function handleHit(hit) {
       return;
     }
     if (id.startsWith('action-')) {
+      if (hit.data?.disabled && hit.data?.reason) {
+        showToast(hit.data.reason);
+        return;
+      }
       const type = id.replace('action-', '');
       const needsTarget = ['takeover', 'strike', 'seize'].includes(type);
+      if (needsTarget && !appState.selectedTarget) {
+        showToast('Tap a player first');
+        return;
+      }
       await emit('session:action', {
         type,
         targetId: needsTarget ? appState.selectedTarget : undefined,

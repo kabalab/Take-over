@@ -29,8 +29,14 @@ export function setSpace(space) {
 }
 
 export function setSession(session) {
+  const prev = appState.session;
   appState.session = session;
   if (session && appState.space?.status === 'active') {
     appState.screen = 'session';
+  }
+  if (!session || session.phase !== 'turn') {
+    appState.selectedTarget = null;
+  } else if (prev?.activeId !== session.activeId) {
+    appState.selectedTarget = null;
   }
 }

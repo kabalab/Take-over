@@ -106,7 +106,7 @@ export class Renderer {
     ctx.fillText(str, x, y);
   }
 
-  button(id, label, x, y, w, h, { disabled = false, primary = false } = {}) {
+  button(id, label, x, y, w, h, { disabled = false, primary = false, disabledReason = null } = {}) {
     const ctx = this.ctx;
     ctx.fillStyle = disabled ? '#21262d' : primary ? '#238636' : '#21262d';
     ctx.strokeStyle = disabled ? '#30363d' : primary ? '#2ea043' : '#30363d';
@@ -120,7 +120,11 @@ export class Renderer {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(label, x + w / 2, y + h / 2);
-    if (!disabled) this.addHit(id, x, y, w, h);
+    if (!disabled) {
+      this.addHit(id, x, y, w, h);
+    } else if (disabledReason) {
+      this.addHit(id, x, y, w, h, { disabled: true, reason: disabledReason });
+    }
   }
 
   drawHome(state) {
@@ -336,22 +340,13 @@ export class Renderer {
       });
     });
 
-    if (s.phase === 'turn' && me?.id === s.activeId && !me.eliminated) {
-      const allowed = new Set(s.allowed || []);
-      const forcedTakeover = allowed.size === 1 && allowed.has('takeover');
-      const needsTarget = ['takeover', 'strike', 'seize'].some((a) => allowed.has(a));
-      if (forcedTakeover) {
-        this.text('10+ credits — must Takeover', 20, h - 278, {
-          color: '#d29922',
-          font: '13px Segoe UI',
-        });
-      } else if (needsTarget && !state.selectedTarget) {
-        this.text('Tap a player, then choose an action', 20, h - 278, {
-          color: '#8b949e',
-          font: '13px Segoe UI',
-        });
-      }
-      this.drawActionBar(state);
+    if (s.phase === 'turn' && me?.id && me.id !== s.activeId && !me.eliminated) {
+      const active = s.members.find((m) => m.id === s.activeId);
+      this.text(`${active?.username ?? 'Player'}'s turn`, w / 2, 56, {
+        align: 'center',
+        font: '15px Segoe UI',
+        color: '#8b949e',
+      });
     } else if (['challenge_action', 'challenge_block'].includes(s.phase)) {
       const canCh = canChallenge(s, userId);
       const canP = canPassPhase(s, userId);
@@ -383,6 +378,10 @@ export class Renderer {
     }
 
     this.button('leave-space', 'Leave', 20, h - 50, 90, 36);
+
+    if (s.phase === 'turn' && me?.id === s.activeId && !me.eliminated) {
+      this.drawActionBar(state);
+    }
   }
 
   drawToken(token, x, y, faceUp, hitId, data = {}) {
@@ -410,26 +409,53 @@ export class Renderer {
 
   drawActionBar(state) {
     const s = state.session;
-    const allowed = new Set(s.allowed || []);
-    const incomeActions = ['collect', 'support', 'levy', 'shuffle'];
-    const targetActions = ['strike', 'seize', 'takeover'];
+    const allowed = s.allowed || [];
+    const allowedSet = new Set(allowed);
+    const incomeOrder = ['collect', 'support', 'levy', 'shuffle'];
+    const targetOrder = ['strike', 'seize', 'takeover'];
+    const incomeActions = incomeOrder.filter((a) => allowedSet.has(a));
+    const targetActions = targetOrder.filter((a) => allowedSet.has(a));
     const btnW = 88;
     const btnH = 36;
     const gap = 8;
     const padX = 20;
     const cols = Math.max(2, Math.floor((this.width - padX * 2 + gap) / (btnW + gap)));
 
+    let y = 56;
+
+    if (allowed.length === 0) {
+      this.text('No actions available', padX, y, { color: '#8b949e', font: '13px Segoe UI' });
+      return;
+    }
+
+    const forcedTakeover = allowed.length === 1 && allowedSet.has('takeover');
+    if (forcedTakeover) {
+      this.text('10+ credits — you must Takeover', padX, y, {
+        color: '#d29922',
+        font: '13px Segoe UI',
+      });
+      y += 22;
+    } else if (targetActions.length > 0 && !state.selectedTarget) {
+      const labels = targetActions.map((a) => ACTION_LABELS[a]).join(' / ');
+      this.text(`Tap an opponent, then ${labels}`, padX, y, {
+        color: '#8b949e',
+        font: '13px Segoe UI',
+      });
+      y += 22;
+    }
+
     const layoutRow = (actions, startY) => {
+      if (actions.length === 0) return startY;
       let x = padX;
       let col = 0;
       let rowY = startY;
       for (const a of actions) {
-        const ok = allowed.has(a);
         const needsTarget = ['takeover', 'strike', 'seize'].includes(a);
-        const disabled = !ok || (needsTarget && !state.selectedTarget);
+        const disabled = needsTarget && !state.selectedTarget;
         this.button(`action-${a}`, ACTION_LABELS[a], x, rowY, btnW, btnH, {
           disabled,
-          primary: ok && !disabled,
+          primary: !disabled,
+          disabledReason: disabled ? 'Tap a player first' : null,
         });
         col++;
         if (col >= cols) {
@@ -443,7 +469,6 @@ export class Renderer {
       return rowY + btnH + gap;
     };
 
-    let y = this.height - 230;
     y = layoutRow(incomeActions, y);
     layoutRow(targetActions, y);
   }
