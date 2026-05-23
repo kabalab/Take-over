@@ -24,23 +24,27 @@ export function attachSocket(httpServer, roomManager) {
   io.use((socket, next) => {
     const req = { headers: socket.request.headers };
     const res = { getHeader: () => {}, setHeader: () => {}, end: () => {} };
-    cookieParser(req, res, () => {
-      const userId = req.session?.userId;
-      if (!userId) return next(new Error('Unauthorized'));
-      const user = findUserById(userId);
-      if (!user) return next(new Error('Unauthorized'));
-      socket.data.user = { id: user.id, username: user.username };
-      next();
+    cookieParser(req, res, async () => {
+      try {
+        const userId = req.session?.userId;
+        if (!userId) return next(new Error('Unauthorized'));
+        const user = await findUserById(userId);
+        if (!user) return next(new Error('Unauthorized'));
+        socket.data.user = { id: user.id, username: user.username };
+        next();
+      } catch (err) {
+        next(err);
+      }
     });
   });
 
-  function notifyFriends(userId) {
+  async function notifyFriends(userId) {
     const affected = new Set([userId]);
-    const myFriends = listFriends(userId);
+    const myFriends = await listFriends(userId);
     for (const f of myFriends) affected.add(f.id);
 
     for (const uid of affected) {
-      const friends = listFriends(uid);
+      const friends = await listFriends(uid);
       const presence = getFriendsPresence(friends);
       const payload = friends.map((f) => ({
         username: f.username,
@@ -55,9 +59,9 @@ export function attachSocket(httpServer, roomManager) {
 
   registerSocketHandlers(io, roomManager, {
     notifyFriends,
-    onConnect(socket, user) {
+    async onConnect(socket, user) {
       setUserOnline(user.id, socket.id, null);
-      const friends = listFriends(user.id);
+      const friends = await listFriends(user.id);
       const presence = getFriendsPresence(friends);
       socket.emit(
         'friends:presence',

@@ -15,10 +15,10 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Username must be 3–20 characters (letters, numbers, underscore)' });
     }
     if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
-    if (findUserByUsername(username)) return res.status(409).json({ error: 'Username already taken' });
+    if (await findUserByUsername(username)) return res.status(409).json({ error: 'Username already taken' });
 
     const hash = await bcrypt.hash(password, 11);
-    const user = createUser(uuidv4(), username, hash);
+    const user = await createUser(uuidv4(), username, hash);
     req.session.userId = user.id;
     req.session.username = user.username;
     res.json({ id: user.id, username: user.username });
@@ -33,7 +33,7 @@ router.post('/login', async (req, res) => {
     const { username, password } = req.body || {};
     if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
 
-    const user = findUserByUsername(username);
+    const user = await findUserByUsername(username);
     if (!user) return res.status(401).json({ error: 'Invalid credentials' });
 
     const ok = await bcrypt.compare(password, user.password_hash);

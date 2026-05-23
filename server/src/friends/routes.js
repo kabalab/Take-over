@@ -7,8 +7,8 @@ const router = Router();
 
 router.use(requireAuth);
 
-router.get('/', (req, res) => {
-  const friends = listFriends(req.session.userId);
+router.get('/', async (req, res) => {
+  const friends = await listFriends(req.session.userId);
   const presence = getFriendsPresence(friends);
   res.json(
     friends.map((f) => ({
@@ -19,22 +19,22 @@ router.get('/', (req, res) => {
   );
 });
 
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   const { username } = req.body || {};
   if (!username) return res.status(400).json({ error: 'Username required' });
   if (username.toLowerCase() === req.session.username.toLowerCase()) {
     return res.status(400).json({ error: 'Cannot add yourself' });
   }
-  const friend = findUserByUsername(username);
+  const friend = await findUserByUsername(username);
   if (!friend) return res.status(404).json({ error: 'User not found' });
-  addFriend(req.session.userId, friend.id);
+  await addFriend(req.session.userId, friend.id);
   res.json({ ok: true, username: friend.username });
 });
 
-router.delete('/:username', (req, res) => {
-  const friend = findUserByUsername(req.params.username);
+router.delete('/:username', async (req, res) => {
+  const friend = await findUserByUsername(req.params.username);
   if (!friend) return res.status(404).json({ error: 'User not found' });
-  removeFriend(req.session.userId, friend.id);
+  await removeFriend(req.session.userId, friend.id);
   res.json({ ok: true });
 });
 

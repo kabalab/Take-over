@@ -2,14 +2,14 @@ import express from 'express';
 import cors from 'cors';
 import http from 'http';
 import { config } from './config.js';
-import { getDb } from './db/index.js';
+import { initDb } from './db/index.js';
 import { sessionMiddleware } from './auth/session.js';
 import authRoutes from './auth/routes.js';
 import friendsRoutes from './friends/routes.js';
 import { RoomManager } from './rooms/RoomManager.js';
 import { attachSocket } from './socket/index.js';
 
-getDb();
+await initDb();
 
 const app = express();
 const roomManager = new RoomManager();

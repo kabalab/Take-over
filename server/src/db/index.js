@@ -1,73 +1,111 @@
 import fs from 'fs';
 import path from 'path';
-import Database from 'better-sqlite3';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
+import { createClient } from '@libsql/client';
 import { config } from '../config.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-let db;
+let client;
 
-export function getDb() {
-  if (!db) {
-    const dir = path.dirname(config.dbPath);
+function getClient() {
+  if (!client) throw new Error('Database not initialized. Call initDb() first.');
+  return client;
+}
+
+export async function initDb() {
+  if (client) return client;
+
+  const url = config.tursoUrl;
+  const opts = { url };
+  if (config.tursoAuthToken) opts.authToken = config.tursoAuthToken;
+
+  if (url.startsWith('file:')) {
+    const filePath = url.replace(/^file:/, '');
+    const dir = path.dirname(filePath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    db = new Database(config.dbPath);
-    db.pragma('journal_mode = WAL');
-    db.pragma('foreign_keys = ON');
-    const schema = readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
-    db.exec(schema);
   }
-  return db;
+
+  client = createClient(opts);
+  const schema = readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
+  await client.executeMultiple(schema);
+
+  return client;
 }
 
-export function findUserByUsername(username) {
-  return getDb().prepare('SELECT * FROM users WHERE username = ? COLLATE NOCASE').get(username);
+export async function findUserByUsername(username) {
+  const result = await getClient().execute({
+    sql: 'SELECT * FROM users WHERE username = ? COLLATE NOCASE',
+    args: [username],
+  });
+  return result.rows[0] ?? null;
 }
 
-export function findUserById(id) {
-  return getDb().prepare('SELECT * FROM users WHERE id = ?').get(id);
+export async function findUserById(id) {
+  const result = await getClient().execute({
+    sql: 'SELECT * FROM users WHERE id = ?',
+    args: [id],
+  });
+  return result.rows[0] ?? null;
 }
 
-export function createUser(id, username, passwordHash) {
-  getDb().prepare('INSERT INTO users (id, username, password_hash) VALUES (?, ?, ?)').run(id, username, passwordHash);
+export async function createUser(id, username, passwordHash) {
+  await getClient().execute({
+    sql: 'INSERT INTO users (id, username, password_hash) VALUES (?, ?, ?)',
+    args: [id, username, passwordHash],
+  });
   return findUserById(id);
 }
 
-export function listFriends(userId) {
-  return getDb()
-    .prepare(
-      `SELECT u.id, u.username
+export async function listFriends(userId) {
+  const result = await getClient().execute({
+    sql: `SELECT u.id, u.username
        FROM friends f
        JOIN users u ON u.id = f.friend_id
        WHERE f.user_id = ?
-       ORDER BY u.username`
-    )
-    .all(userId);
-}
-
-export function addFriend(userId, friendId) {
-  const db = getDb();
-  const insert = db.prepare('INSERT OR IGNORE INTO friends (user_id, friend_id) VALUES (?, ?)');
-  const tx = db.transaction(() => {
-    insert.run(userId, friendId);
-    insert.run(friendId, userId);
+       ORDER BY u.username`,
+    args: [userId],
   });
-  tx();
+  return result.rows;
 }
 
-export function removeFriend(userId, friendId) {
-  const db = getDb();
-  const del = db.prepare('DELETE FROM friends WHERE user_id = ? AND friend_id = ?');
-  const tx = db.transaction(() => {
-    del.run(userId, friendId);
-    del.run(friendId, userId);
+export async function addFriend(userId, friendId) {
+  await getClient().batch(
+    [
+      {
+        sql: 'INSERT OR IGNORE INTO friends (user_id, friend_id) VALUES (?, ?)',
+        args: [userId, friendId],
+      },
+      {
+        sql: 'INSERT OR IGNORE INTO friends (user_id, friend_id) VALUES (?, ?)',
+        args: [friendId, userId],
+      },
+    ],
+    'write'
+  );
+}
+
+export async function removeFriend(userId, friendId) {
+  await getClient().batch(
+    [
+      {
+        sql: 'DELETE FROM friends WHERE user_id = ? AND friend_id = ?',
+        args: [userId, friendId],
+      },
+      {
+        sql: 'DELETE FROM friends WHERE user_id = ? AND friend_id = ?',
+        args: [friendId, userId],
+      },
+    ],
+    'write'
+  );
+}
+
+export async function areFriends(userId, friendId) {
+  const result = await getClient().execute({
+    sql: 'SELECT 1 FROM friends WHERE user_id = ? AND friend_id = ?',
+    args: [userId, friendId],
   });
-  tx();
-}
-
-export function areFriends(userId, friendId) {
-  const row = getDb().prepare('SELECT 1 FROM friends WHERE user_id = ? AND friend_id = ?').get(userId, friendId);
-  return !!row;
+  return result.rows.length > 0;
 }

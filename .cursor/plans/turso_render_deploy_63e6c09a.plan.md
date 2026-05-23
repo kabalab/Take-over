@@ -4,19 +4,19 @@ overview: Migrate persistence from local SQLite on Render (paid disk) to Turso (
 todos:
   - id: deps-config
     content: Swap better-sqlite3 for @libsql/client; add TURSO_* to config.js and .env.example
-    status: pending
+    status: completed
   - id: db-layer
     content: Rewrite server/src/db/index.js with async libSQL client, batch transactions, schema init
-    status: pending
+    status: completed
   - id: await-callers
     content: Update auth routes, friends routes, socket index/handlers to await DB functions
-    status: pending
+    status: completed
   - id: render-readme
     content: Remove disk from render.yaml; document Turso + Render free + Vercel deploy steps in README
-    status: pending
+    status: completed
   - id: verify
     content: "Test locally (file: URL) and document production smoke checklist (friends survive restart)"
-    status: pending
+    status: completed
 isProject: false
 ---
 

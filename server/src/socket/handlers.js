@@ -25,7 +25,7 @@ export function registerSocketHandlers(io, roomManager, { notifyFriends, onConne
       }
     });
 
-    socket.on('space:join', ({ code, spectate } = {}, cb) => {
+    socket.on('space:join', async ({ code, spectate } = {}, cb) => {
       try {
         const room = roomManager.get(code);
         if (!room) return cb?.({ ok: false, error: 'Space not found' });
@@ -33,7 +33,7 @@ export function registerSocketHandlers(io, roomManager, { notifyFriends, onConne
         let allowed = room.hostId === user.id;
         if (room.visibility === VISIBILITY.private && !allowed) {
           for (const m of room.members.values()) {
-            if (m.userId !== user.id && areFriends(user.id, m.userId)) {
+            if (m.userId !== user.id && (await areFriends(user.id, m.userId))) {
               allowed = true;
               break;
             }
