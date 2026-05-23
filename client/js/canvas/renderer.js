@@ -313,7 +313,7 @@ export class Renderer {
         this.ctx.stroke();
       }
       if (!m.eliminated && m.id !== me?.id && s.phase === 'turn' && me?.id === s.activeId) {
-        this.addHit(`target-${m.id}`, x - 40, y - 40, 80, 80, { targetId: m.id });
+        this.addHit(`target-${m.id}`, x - 36, y - 36, 72, 72, { targetId: m.id });
       }
     });
 
@@ -338,9 +338,15 @@ export class Renderer {
 
     if (s.phase === 'turn' && me?.id === s.activeId && !me.eliminated) {
       const allowed = new Set(s.allowed || []);
+      const forcedTakeover = allowed.size === 1 && allowed.has('takeover');
       const needsTarget = ['takeover', 'strike', 'seize'].some((a) => allowed.has(a));
-      if (needsTarget && !state.selectedTarget) {
-        this.text('Tap a player, then choose an action', 20, h - 244, {
+      if (forcedTakeover) {
+        this.text('10+ credits — must Takeover', 20, h - 278, {
+          color: '#d29922',
+          font: '13px Segoe UI',
+        });
+      } else if (needsTarget && !state.selectedTarget) {
+        this.text('Tap a player, then choose an action', 20, h - 278, {
           color: '#8b949e',
           font: '13px Segoe UI',
         });
@@ -405,19 +411,41 @@ export class Renderer {
   drawActionBar(state) {
     const s = state.session;
     const allowed = new Set(s.allowed || []);
-    const actions = ['collect', 'support', 'levy', 'strike', 'seize', 'shuffle', 'takeover'];
-    let x = 20;
-    const y = this.height - 200;
-    for (const a of actions) {
-      const ok = allowed.has(a);
-      const needsTarget = ['takeover', 'strike', 'seize'].includes(a);
-      const disabled = !ok || (needsTarget && !state.selectedTarget);
-      this.button(`action-${a}`, ACTION_LABELS[a], x, y, 88, 36, { disabled, primary: ok && !disabled });
-      x += 96;
-      if (x > this.width - 100) {
-        x = 20;
+    const incomeActions = ['collect', 'support', 'levy', 'shuffle'];
+    const targetActions = ['strike', 'seize', 'takeover'];
+    const btnW = 88;
+    const btnH = 36;
+    const gap = 8;
+    const padX = 20;
+    const cols = Math.max(2, Math.floor((this.width - padX * 2 + gap) / (btnW + gap)));
+
+    const layoutRow = (actions, startY) => {
+      let x = padX;
+      let col = 0;
+      let rowY = startY;
+      for (const a of actions) {
+        const ok = allowed.has(a);
+        const needsTarget = ['takeover', 'strike', 'seize'].includes(a);
+        const disabled = !ok || (needsTarget && !state.selectedTarget);
+        this.button(`action-${a}`, ACTION_LABELS[a], x, rowY, btnW, btnH, {
+          disabled,
+          primary: ok && !disabled,
+        });
+        col++;
+        if (col >= cols) {
+          col = 0;
+          x = padX;
+          rowY += btnH + gap;
+        } else {
+          x += btnW + gap;
+        }
       }
-    }
+      return rowY + btnH + gap;
+    };
+
+    let y = this.height - 230;
+    y = layoutRow(incomeActions, y);
+    layoutRow(targetActions, y);
   }
 
   drawBlockBar(state, userId) {
