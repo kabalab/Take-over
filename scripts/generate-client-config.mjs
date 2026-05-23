@@ -14,13 +14,17 @@ if (!process.env.VERCEL) {
   process.exit(0);
 }
 
-const api = process.env.TAKEOVER_API_URL?.trim();
+const api = process.env.TAKEOVER_API_URL?.trim().replace(/\/$/, '');
 if (!api) {
   console.error('Set TAKEOVER_API_URL in Vercel (your Render URL, e.g. https://take-over-api.onrender.com)');
   process.exit(1);
 }
+if (!api.startsWith('https://')) {
+  console.error('TAKEOVER_API_URL must start with https://');
+  process.exit(1);
+}
 
-const socket = process.env.TAKEOVER_SOCKET_URL?.trim() || api;
+const socket = (process.env.TAKEOVER_SOCKET_URL?.trim() || api).replace(/\/$/, '');
 const body = `// Generated at build time — do not edit on Vercel deploys
 window.__API_URL__ = ${JSON.stringify(api)};
 window.__SOCKET_URL__ = ${JSON.stringify(socket)};

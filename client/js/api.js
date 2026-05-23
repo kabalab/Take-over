@@ -1,14 +1,22 @@
-const base = () => window.__API_URL__;
+const base = () => (window.__API_URL__ || '').replace(/\/$/, '');
 
 export async function api(path, options = {}) {
-  const res = await fetch(`${base()}${path}`, {
-    ...options,
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-    },
-  });
+  const url = `${base()}${path}`;
+  let res;
+  try {
+    res = await fetch(url, {
+      ...options,
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(options.headers || {}),
+      },
+    });
+  } catch {
+    throw new Error(
+      `Cannot reach API at ${url}. Check TAKEOVER_API_URL on Vercel and CLIENT_ORIGIN on Render.`
+    );
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || res.statusText);
   return data;

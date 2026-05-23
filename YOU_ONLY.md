@@ -27,7 +27,16 @@ Repo is ready on GitHub. No CLI tools were available on this machine, so these s
 
 ## 4. Link them
 
-- Render → set `CLIENT_ORIGIN` to exact Vercel URL → redeploy
+- Render → set `CLIENT_ORIGIN` to exact Vercel URL (no trailing `/`) → redeploy
 - Open Vercel URL → register → add friend → redeploy Render once → friend should still exist
+
+## "Failed to fetch" on register
+
+1. Open your Vercel site → **F12 → Network** → try Register → click the failed request.
+   - URL is `localhost:3001` → Vercel missing `TAKEOVER_API_URL`; set it and redeploy.
+   - URL is Render but **(blocked)** or CORS error → fix `CLIENT_ORIGIN` on Render to match the **exact** browser URL (including `https://`).
+   - Request **pending** then fails → open Render `/health` in a tab; cold start can take ~1 min on free tier.
+2. Render **Logs**: if the service crashes on boot, check `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`.
+3. `CLIENT_ORIGIN` can be comma-separated for multiple URLs, e.g. production + preview.
 
 Done.

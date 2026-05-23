@@ -14,9 +14,37 @@ await initDb();
 const app = express();
 const roomManager = new RoomManager();
 
+if (config.isProd) app.set('trust proxy', 1);
+
+function isAllowedOrigin(origin) {
+  if (!origin) return true;
+  const normalized = origin.replace(/\/$/, '');
+  if (config.clientOrigins.includes(normalized)) return true;
+  try {
+    const host = new URL(normalized).hostname;
+    if (
+      config.clientOrigins.some((allowed) => {
+        const allowedHost = new URL(allowed).hostname;
+        return allowedHost.endsWith('.vercel.app') && host.endsWith('.vercel.app');
+      })
+    ) {
+      return true;
+    }
+  } catch {
+    /* ignore malformed origin */
+  }
+  return false;
+}
+
 app.use(
   cors({
-    origin: config.clientOrigin,
+    origin(origin, callback) {
+      if (isAllowedOrigin(origin)) callback(null, true);
+      else {
+        console.warn('CORS blocked origin:', origin, 'allowed:', config.clientOrigins);
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true,
   })
 );

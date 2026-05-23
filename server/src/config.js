@@ -5,9 +5,15 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const defaultDbPath = path.join(__dirname, '..', 'data', 'takeover.db');
 
+function parseClientOrigins() {
+  const raw = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
+  return raw.split(',').map((s) => s.trim().replace(/\/$/, '')).filter(Boolean);
+}
+
 export const config = {
   port: parseInt(process.env.PORT || '3001', 10),
-  clientOrigin: process.env.CLIENT_ORIGIN || 'http://localhost:5173',
+  clientOrigins: parseClientOrigins(),
+  clientOrigin: parseClientOrigins()[0],
   sessionSecret: process.env.SESSION_SECRET || 'dev-secret-change-in-production',
   isProd: process.env.NODE_ENV === 'production',
   tursoUrl: process.env.TURSO_DATABASE_URL || `file:${defaultDbPath}`,
